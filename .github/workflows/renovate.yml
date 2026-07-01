@@ -15,12 +15,12 @@ jobs:
   renovate:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/create-github-app-token@v1
+      - uses: actions/create-github-app-token@v3
         id: app-token
         with:
           client-id: ${{ secrets.BOT_JACKSON_CLIENT_ID }}
           private-key: ${{ secrets.BOT_JACKSON_PRIVATE_KEY }}
-      - uses: renovatebot/github-action@v46
+      - uses: renovatebot/github-action@v46.1.17
         with:
           token: ${{ steps.app-token.outputs.token }}
         env:
