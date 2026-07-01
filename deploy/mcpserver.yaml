@@ -1,0 +1,29 @@
+apiVersion: toolhive.stacklok.dev/v1alpha1
+kind: MCPServer
+metadata:
+  name: context8
+  namespace: toolhive-system
+spec:
+  image: ghcr.io/OWNER/context8:latest
+  transport: stdio
+  proxyPort: 8080
+  backendReplicas: 1   # REQUIRED: rotation accounting is per-process.
+  secrets:
+    - name: context8-api-keys
+      key: api-keys
+      targetEnvName: CONTEXT7_API_KEYS
+  # Optional: enable disk persistence by mounting a PVC and pointing the state file at it.
+  # podTemplateSpec:
+  #   spec:
+  #     containers:
+  #       - name: mcp
+  #         env:
+  #           - name: CONTEXT7_STATE_FILE
+  #             value: /state/context8-state.json
+  #         volumeMounts:
+  #           - name: state
+  #             mountPath: /state
+  #     volumes:
+  #       - name: state
+  #         persistentVolumeClaim:
+  #           claimName: context8-state

@@ -1,0 +1,22 @@
+# Allow egress to context7.com (HTTPS) and DNS. Pair with ToolHive network isolation.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: context8-egress
+  namespace: toolhive-system
+spec:
+  podSelector:
+    matchLabels:
+      app: context8
+  policyTypes: ["Egress"]
+  egress:
+    - to: []
+      ports:
+        - protocol: TCP
+          port: 443
+    - to: []
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
