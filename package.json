@@ -22,10 +22,10 @@
     "zod": "^3.23.0"
   },
   "devDependencies": {
-    "@biomejs/biome": "^2.0.0",
-    "@tsconfig/node24": "^24.0.0",
-    "@types/node": "^24.0.0",
-    "typescript": "^6.0.0",
-    "vitest": "^2.0.0"
+    "@biomejs/biome": "2.5.2",
+    "@tsconfig/node24": "24.0.4",
+    "@types/node": "24.13.2",
+    "typescript": "6.0.3",
+    "vitest": "2.1.9"
   }
 }
