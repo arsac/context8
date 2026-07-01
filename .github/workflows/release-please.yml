@@ -25,15 +25,16 @@ jobs:
           month="$(date -u +%-m)"
           tags="$(gh api "repos/$REPO/tags" --paginate --jq '.[].name' || true)"
           max="$(printf '%s\n' "$tags" \
-            | { grep -E "^v${year}\.${month}\.[0-9]+$" || true; } \
-            | sed -E "s/^v${year}\.${month}\.//" | sort -n | tail -1)"
+            | { grep -E "^v?${year}\.${month}\.[0-9]+$" || true; } \
+            | sed -E "s/^v?${year}\.${month}\.//" | sort -n | tail -1)"
           if [ -z "$max" ]; then micro=0; else micro=$((max + 1)); fi
           version="${year}.${month}.${micro}"
           echo "Computed CalVer: $version"
           echo "version=$version" >> "$GITHUB_OUTPUT"
+      # Simple (non-manifest) mode: release-as is honored here, whereas manifest
+      # mode ignores it in favor of the manifest/config files.
       - uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5
         with:
           token: ${{ steps.app-token.outputs.token }}
-          config-file: release-please-config.json
-          manifest-file: .release-please-manifest.json
+          release-type: node
           release-as: ${{ steps.calver.outputs.version }}
