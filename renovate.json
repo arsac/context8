@@ -1,0 +1,23 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:best-practices", ":semanticCommits"],
+  "timezone": "Etc/UTC",
+  "lockFileMaintenance": {
+    "enabled": true,
+    "automerge": true
+  },
+  "packageRules": [
+    {
+      "description": "Automerge dev-dependency patch/minor updates once CI passes",
+      "matchDepTypes": ["devDependencies"],
+      "matchUpdateTypes": ["patch", "minor"],
+      "automerge": true
+    },
+    {
+      "description": "Automerge digest and pin updates for GitHub Actions and the Docker base image",
+      "matchManagers": ["github-actions", "dockerfile"],
+      "matchUpdateTypes": ["digest", "pin", "pinDigest"],
+      "automerge": true
+    }
+  ]
+}
