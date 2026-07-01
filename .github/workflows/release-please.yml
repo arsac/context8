@@ -14,8 +14,26 @@ jobs:
         with:
           client-id: ${{ secrets.BOT_JACKSON_CLIENT_ID }}
           private-key: ${{ secrets.BOT_JACKSON_PRIVATE_KEY }}
+      # Compute the calendar version: YYYY.M.MICRO, where MICRO is the next
+      # release number within the current year/month (0 for the first).
+      - id: calver
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          year="$(date -u +%Y)"
+          month="$(date -u +%-m)"
+          tags="$(gh api "repos/$REPO/tags" --paginate --jq '.[].name' || true)"
+          max="$(printf '%s\n' "$tags" \
+            | { grep -E "^v${year}\.${month}\.[0-9]+$" || true; } \
+            | sed -E "s/^v${year}\.${month}\.//" | sort -n | tail -1)"
+          if [ -z "$max" ]; then micro=0; else micro=$((max + 1)); fi
+          version="${year}.${month}.${micro}"
+          echo "Computed CalVer: $version"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
       - uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5
         with:
           token: ${{ steps.app-token.outputs.token }}
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
+          release-as: ${{ steps.calver.outputs.version }}
