@@ -109,3 +109,21 @@ npm run lint        # Biome (lint + format check)
 npm run typecheck   # tsc --noEmit
 npm run build       # tsc -> dist/
 ```
+
+### Live e2e test
+
+`src/e2e.test.ts` exercises both MCP tools against the **real Context7 API** and checks
+that two keys authenticate independently. It runs as part of `npm test` **only when two
+distinct API keys are present**; otherwise it **silently skips** (reported as skipped,
+not failed). A green `npm test` with no keys therefore does *not* mean the live tools
+were validated — it means the live block never ran.
+
+Run it with two distinct keys:
+
+```bash
+CONTEXT7_API_KEY_1=<key1> CONTEXT7_API_KEY_2=<key2> npm test
+```
+
+It hits the network and consumes real quota. Because the gate is key-presence only, any
+environment that exports two or more keys (including a future keyed CI job) will run it
+on a plain `npm test`.
