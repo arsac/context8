@@ -17,12 +17,14 @@ Same names and input schemas as the official Context7 MCP.
 
 ## Drop-in for an existing Context7 setup
 
-MCP clients expose a server's tools as `mcp__<config-key>__<tool>`, where `<config-key>`
-is the name you register the server under — **not** the server's internal name. context8's
-tools are already named `resolve-library-id` and `query-docs`, matching Context7.
+Clients like Claude Code expose a server's tools as `mcp__<config-key>__<tool>`, where
+`<config-key>` is the name you register the server under — **not** the server's internal
+name. (The MCP protocol itself exposes tools by their bare name, e.g. `resolve-library-id`;
+the namespacing is the client's convention.) context8's tools are already named
+`resolve-library-id` and `query-docs`, matching Context7.
 
 To use context8 as a drop-in, register it under the **same key your client uses for
-Context7** (typically `context7`). The tool IDs then become
+Context7** (typically `context7`). In Claude Code the tool IDs then become
 `mcp__context7__resolve-library-id` and `mcp__context7__query-docs`, so existing skills,
 hardcoded tool references, and `context7`-scoped permission allowlists keep working
 unchanged. The internal server name (`context8`) is cosmetic and does not affect tool IDs.
