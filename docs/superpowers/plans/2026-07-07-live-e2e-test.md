@@ -33,7 +33,7 @@
   - `Client` from `@modelcontextprotocol/sdk/client/index.js` — methods `connect(transport)`, `listTools(): Promise<{ tools: { name: string }[] }>`, `callTool(params): Promise<{ content: { type: string; text?: string }[]; isError?: boolean }>`, `close()`
   - `InMemoryTransport.createLinkedPair(): [clientTransport, serverTransport]` from `@modelcontextprotocol/sdk/inMemory.js`
   - Tool names: `"resolve-library-id"` (args `{ query, libraryName }`), `"query-docs"` (args `{ libraryId, query }`)
-- Produces: the gated `describe` block and a `connect()` helper that Task 2 adds a test into.
+- Produces (reused by Task 2): the module-level `KEYS` and `TIMEOUT_MS` constants, the `CallToolResult` type, and the gated `describe.skipIf(...)` block that Task 2 adds a test into.
 
 - [ ] **Step 1: Write the file with the gate and Test A**
 
@@ -46,9 +46,9 @@ import { describe, expect, it } from "vitest";
 import { loadConfig, parseApiKeys } from "./config.js";
 import { buildServer } from "./index.js";
 
-// Live e2e: hits the real Context7 API. Runs only when two real keys are present
-// (e.g. CONTEXT7_API_KEY_1 / CONTEXT7_API_KEY_2). Skipped — a no-op with no network —
-// in normal CI, keeping the default suite green.
+// Live e2e: hits the real Context7 API. Runs only when two distinct real keys are
+// present (e.g. CONTEXT7_API_KEY_1 / CONTEXT7_API_KEY_2). Skipped — a no-op with no
+// network — in normal CI, keeping the default suite green.
 const KEYS = parseApiKeys(process.env);
 const TIMEOUT_MS = 30_000;
 
@@ -56,16 +56,30 @@ const TIMEOUT_MS = 30_000;
 // than parsed from the resolve response, whose body shape is not yet confirmed.
 const KNOWN_LIBRARY_ID = "/vercel/next.js";
 
-function textOf(result: { content: { type: string; text?: string }[] }): string {
+type CallToolResult = { content: { type: string; text?: string }[]; isError?: boolean };
+
+function textOf(result: CallToolResult): string {
   return result.content
     .filter((c) => c.type === "text")
     .map((c) => c.text ?? "")
     .join("");
 }
 
+// A wrong API path on the live *website* base URL can 200 an HTML page; assert real
+// (non-HTML) content so that does not read as a false pass. The error body is passed as
+// the assertion message so a live failure shows what the API actually returned.
+function expectRealContent(result: CallToolResult): void {
+  const text = textOf(result);
+  expect(result.isError ?? false, text).toBe(false);
+  expect(text.length, "empty response body").toBeGreaterThan(0);
+  expect(text.trimStart().startsWith("<"), `looks like HTML: ${text.slice(0, 200)}`).toBe(false);
+}
+
 describe.skipIf(KEYS.length < 2)("e2e (live Context7 API)", () => {
   async function connect(): Promise<Client> {
-    const { server } = buildServer(loadConfig());
+    // stateFile: null so an ambient CONTEXT7_STATE_FILE cannot restore a cached body
+    // (false green) or a cooldown (false red), and no key state is written to disk.
+    const { server } = buildServer({ ...loadConfig(), stateFile: null });
     const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
     const client = new Client({ name: "e2e-client", version: "0.0.0" });
     await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
@@ -85,15 +99,13 @@ describe.skipIf(KEYS.length < 2)("e2e (live Context7 API)", () => {
           name: "resolve-library-id",
           arguments: { libraryName: "next.js", query: "routing" },
         });
-        expect(resolved.isError ?? false).toBe(false);
-        expect(textOf(resolved).length).toBeGreaterThan(0);
+        expectRealContent(resolved);
 
         const docs = await client.callTool({
           name: "query-docs",
           arguments: { libraryId: KNOWN_LIBRARY_ID, query: "routing" },
         });
-        expect(docs.isError ?? false).toBe(false);
-        expect(textOf(docs).length).toBeGreaterThan(0);
+        expectRealContent(docs);
       } finally {
         await client.close();
       }
@@ -102,6 +114,13 @@ describe.skipIf(KEYS.length < 2)("e2e (live Context7 API)", () => {
   );
 });
 ```
+
+Note: `expect(actual, message)` is Vitest's two-arg form — the message shows on failure.
+`callTool` returns a `CallToolResult` whose `content` is a union; the local
+`CallToolResult` type above is a structural subset sufficient for `textOf`/asserts (cast
+is unnecessary since the SDK result is assignable to it). If `tsc` objects to the
+`callTool` return being passed to `expectRealContent`, annotate the call sites with
+`const resolved: CallToolResult = await client.callTool({...})`.
 
 - [ ] **Step 2: Run the suite to verify the block is skipped and everything else is green**
 
@@ -120,8 +139,14 @@ Expected: no errors for `src/e2e.test.ts`. If Biome reports formatting, run `npm
 
 - [ ] **Step 5: (Optional, only if you have two live keys) Run the live path**
 
-Run: `CONTEXT7_API_KEY_1=<key1> CONTEXT7_API_KEY_2=<key2> npm test`
-Expected: the `e2e` block runs and its test passes. If it fails on a non-200 (e.g. the tool result is `isError`), the ASSUMED endpoint/param names in `src/context7Client.ts` are wrong — that is the test doing its job; reconcile against `docs/context7-api-findings.md` before proceeding.
+Run: `CONTEXT7_API_KEY_1=<key1> CONTEXT7_API_KEY_2=<key2> npm test` (two **distinct** keys).
+Expected: the `e2e` block runs and its test passes. On failure, read the assertion
+message — it now carries the API's response body. Interpret the cause before assuming a
+contract bug: `isError` with a 401/403 body → bad key; a 404/HTML body or a "looks like
+HTML" failure → wrong endpoint/param names (reconcile against
+`docs/context7-api-findings.md`); a 429 body → rate-limited (key is fine, retry later);
+a 5xx body or a Vitest 30s timeout → transient outage/network, not a contract bug. Only
+the endpoint/param case warrants changing `src/context7Client.ts`.
 
 - [ ] **Step 6: Commit**
 
@@ -160,12 +185,14 @@ Then add this second `it` inside the `describe.skipIf(...)` block, after the fir
     async () => {
       const { baseUrl } = loadConfig();
       const client = new Context7Client({ baseUrl });
-      for (const key of KEYS) {
+      // slice(0, 2): exercise exactly two keys even if the env supplies more, so the
+      // test does not burn extra live quota beyond the two-key rotation it validates.
+      for (const key of KEYS.slice(0, 2)) {
         const resp = await client.searchLibraries(
           { query: "routing", libraryName: "next.js" },
           key,
         );
-        expect(resp.status).toBe(200);
+        expect(resp.status, `key ${resp.status} body: ${resp.body.slice(0, 200)}`).toBe(200);
       }
     },
     TIMEOUT_MS,
@@ -189,8 +216,11 @@ Expected: no errors. Run `npm run format` first if Biome reports import ordering
 
 - [ ] **Step 5: (Optional, only with two live keys) Run the live path**
 
-Run: `CONTEXT7_API_KEY_1=<key1> CONTEXT7_API_KEY_2=<key2> npm test`
-Expected: both e2e tests pass. A non-200 for either key means that key is invalid or the search endpoint/params are wrong — reconcile as in Task 1 Step 5.
+Run: `CONTEXT7_API_KEY_1=<key1> CONTEXT7_API_KEY_2=<key2> npm test` (two **distinct** keys).
+Expected: both e2e tests pass. The assertion message carries the status + body — read it
+before concluding: 401/403 → that key is invalid; 404/HTML → wrong search endpoint/params
+(`src/context7Client.ts`); 429 → rate-limited, key is fine; 5xx/timeout → transient. Same
+interpretation guide as Task 1 Step 5.
 
 - [ ] **Step 6: Commit**
 
@@ -201,21 +231,82 @@ git commit -m "test: verify both keys authenticate independently in e2e"
 
 ---
 
+### Task 3: Document the live e2e in the README
+
+**Files:**
+- Modify: `README.md` (add a subsection under `## Development`)
+
+**Interfaces:**
+- Consumes: nothing. Produces: nothing consumed by code.
+
+Rationale: without this, a green `npm test` with no keys looks identical to a passing
+live run (the block silently skips), and the run command lives only in `docs/`. This
+subsection makes both discoverable.
+
+- [ ] **Step 1: Add the subsection**
+
+Append the following to `README.md` immediately after the `## Development` code block
+(after the line ``npm run build       # tsc -> dist/`` and its closing ` ``` `). The block
+below is shown wrapped in four backticks so its inner three-backtick fence is visible —
+write the inner content (from `### Live e2e test` through the final line) into the README
+using normal three-backtick fences:
+
+````markdown
+### Live e2e test
+
+`src/e2e.test.ts` exercises both MCP tools against the **real Context7 API** and checks
+that two keys authenticate independently. It runs as part of `npm test` **only when two
+distinct API keys are present**; otherwise it **silently skips** (reported as skipped,
+not failed). A green `npm test` with no keys therefore does *not* mean the live tools
+were validated — it means the live block never ran.
+
+Run it with two distinct keys:
+
+```bash
+CONTEXT7_API_KEY_1=<key1> CONTEXT7_API_KEY_2=<key2> npm test
+```
+
+It hits the network and consumes real quota. Because the gate is key-presence only, any
+environment that exports two or more keys (including a future keyed CI job) will run it
+on a plain `npm test`.
+````
+
+- [ ] **Step 2: Verify the docs build/render sanity**
+
+Run: `npm run lint`
+Expected: no errors (Biome does not lint Markdown by default; this just confirms nothing
+else regressed). Visually confirm the new subsection renders (nested code fence inside
+the block is intentional — use the exact fences shown).
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add README.md
+git commit -m "docs: document the live e2e test and its skip behavior"
+```
+
+---
+
 ## Self-Review
 
 **Spec coverage:**
 - In-memory MCP protocol layer (`buildServer` + `Client` + `InMemoryTransport`) → Task 1. ✓
 - `listTools` asserts both tools registered → Task 1. ✓
-- `callTool` for both tools, non-error + non-empty → Task 1. ✓
+- `callTool` for both tools, non-error + non-empty + **non-HTML** → Task 1 (`expectRealContent`). ✓
+- **State/cache isolation** (`stateFile: null`) so no false green/red from ambient env → Task 1 (`connect()`). ✓
+- **Diagnostic failure messages** (error body / status in the `expect` message) → Task 1 & 2. ✓
 - Hardcoded `libraryId`, no resolve-parsing → Task 1 (`KNOWN_LIBRARY_ID`). ✓
-- Both keys authenticate independently via direct `searchLibraries` → Task 2. ✓
+- Both keys authenticate independently via direct `searchLibraries`, **bounded to two** → Task 2 (`KEYS.slice(0, 2)`). ✓
 - Gate: `describe.skipIf(KEYS.length < 2)` with `parseApiKeys(process.env)` → Task 1. ✓
 - Keys from `process.env`, no `.env` → Task 1 (`parseApiKeys(process.env)`, `loadConfig()`). ✓
 - ~30s per-test timeout → Task 1 & 2 (`TIMEOUT_MS`). ✓
 - Client cleanup → Task 1 (`finally { await client.close() }`). ✓
-- No new deps/scripts/config → confirmed, only one file created. ✓
+- **README documents live run + silent-skip** → Task 3. ✓
+- No new deps/scripts/config → confirmed, only one source file created + README/docs edits. ✓
 - Green/no-network in CI → Task 1 Step 2, Task 2 Step 2. ✓
 
 **Placeholder scan:** No TBD/TODO; all code is complete and copy-paste ready.
 
-**Type consistency:** `textOf`, `connect`, `KEYS`, `TIMEOUT_MS`, `KNOWN_LIBRARY_ID` defined in Task 1 and reused as-is in Task 2. Tool names (`query-docs`, `resolve-library-id`) and arg keys (`libraryName`/`query`, `libraryId`/`query`) match `src/tools.ts`. `Context7Client` constructor/`searchLibraries` signatures match `src/context7Client.ts`.
+**Type consistency:** `textOf`, `expectRealContent`, `CallToolResult`, `connect`, `KEYS`, `TIMEOUT_MS`, `KNOWN_LIBRARY_ID` defined in Task 1 and reused as-is in Task 2. `expectRealContent` takes the `CallToolResult` structural type that `client.callTool` returns. Tool names (`query-docs`, `resolve-library-id`) and arg keys (`libraryName`/`query`, `libraryId`/`query`) match `src/tools.ts`. `Context7Client` constructor/`searchLibraries` signatures match `src/context7Client.ts`. `buildServer` accepts a full `Config`; `{ ...loadConfig(), stateFile: null }` satisfies it (spread preserves all required fields).
+
+**Review provenance:** Revisions 1–6 in the arbiter decision log (not-HTML assertion, diagnostic messages, `stateFile: null`, `KEYS.slice(0,2)`, README doc, softened CONFIRMED claim) are folded in. The keys-only gating footgun was raised and consciously accepted by the maintainer (documented in Task 3 + spec).
