@@ -2,6 +2,7 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { describe, expect, it } from "vitest";
 import { loadConfig, parseApiKeys } from "./config.js";
+import { Context7Client } from "./context7Client.js";
 import { buildServer } from "./index.js";
 
 // Live e2e: hits the real Context7 API. Runs only when two distinct real keys are
@@ -66,6 +67,24 @@ describe.skipIf(KEYS.length < 2)("e2e (live Context7 API)", () => {
         expectRealContent(docs);
       } finally {
         await client.close();
+      }
+    },
+    TIMEOUT_MS,
+  );
+
+  it(
+    "authenticates each of the two keys independently",
+    async () => {
+      const { baseUrl } = loadConfig();
+      const client = new Context7Client({ baseUrl });
+      // slice(0, 2): exercise exactly two keys even if the env supplies more, so the
+      // test does not burn extra live quota beyond the two-key rotation it validates.
+      for (const key of KEYS.slice(0, 2)) {
+        const resp = await client.searchLibraries(
+          { query: "routing", libraryName: "next.js" },
+          key,
+        );
+        expect(resp.status, `key ${resp.status} body: ${resp.body.slice(0, 200)}`).toBe(200);
       }
     },
     TIMEOUT_MS,
