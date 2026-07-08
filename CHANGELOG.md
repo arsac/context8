@@ -1,5 +1,19 @@
 # Changelog
 
+## [2026.7.1](https://github.com/arsac/context8/compare/v2026.7.0...v2026.7.1) (2026-07-08)
+
+
+### Features
+
+* advertise Context7-style server instructions ([1d6f522](https://github.com/arsac/context8/commit/1d6f522a1d68e1e0334671166385b3126564646f))
+* make context8 a drop-in for Context7 (server instructions + docs) ([ee2f489](https://github.com/arsac/context8/commit/ee2f4896913505323749361b2f7541809a53ae8b))
+
+
+### Bug Fixes
+
+* **deps:** update dependency zod to v4 ([e86f76f](https://github.com/arsac/context8/commit/e86f76f0fe96df5015aaf9103d37466eb6b5d517))
+* **deps:** update dependency zod to v4 ([c3e1bef](https://github.com/arsac/context8/commit/c3e1bef0a77415bce52c0626291b563a84899830))
+
 ## 2026.7.0 (2026-07-01)
 
 
