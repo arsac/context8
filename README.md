@@ -15,6 +15,18 @@ designed to deploy via the [ToolHive](https://docs.stacklok.com/toolhive/) `MCPS
 
 Same names and input schemas as the official Context7 MCP.
 
+## Drop-in for an existing Context7 setup
+
+MCP clients expose a server's tools as `mcp__<config-key>__<tool>`, where `<config-key>`
+is the name you register the server under — **not** the server's internal name. context8's
+tools are already named `resolve-library-id` and `query-docs`, matching Context7.
+
+To use context8 as a drop-in, register it under the **same key your client uses for
+Context7** (typically `context7`). The tool IDs then become
+`mcp__context7__resolve-library-id` and `mcp__context7__query-docs`, so existing skills,
+hardcoded tool references, and `context7`-scoped permission allowlists keep working
+unchanged. The internal server name (`context8`) is cosmetic and does not affect tool IDs.
+
 ## Configuration
 
 Keys are read from three sources and **merged + deduped** (first-seen order preserved), so the
